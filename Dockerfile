@@ -108,8 +108,5 @@ EXPOSE 4000/tcp
 
 COPY docker/supervisord.conf /etc/supervisord.conf
 
-# Create wrapper entrypoint that runs writeconfig.py before the original entrypoint
-RUN printf '#!/bin/bash\npython openrouterconfig/writeconfig.py\nexec docker/prod_entrypoint.sh "$@"\n' > wrapper_entrypoint.sh && chmod +x wrapper_entrypoint.sh
-
 ENTRYPOINT ["docker/prod_entrypoint.sh"]
 CMD ["--port", "4000", "--config", "openrouterconfig/proxy_config.yaml", "--detailed_debug"]
