@@ -5,6 +5,8 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_PYTHON="$REPO_ROOT/.venv/bin/python"
 MIGRATION_SCRIPT="$REPO_ROOT/litellm/proxy/prisma_migration.py"
 
+python3 openrouterconfig/writeconfig.py
+
 if [ -x "$VENV_PYTHON" ]; then
     "$VENV_PYTHON" "$MIGRATION_SCRIPT"
 elif command -v uv >/dev/null 2>&1; then
