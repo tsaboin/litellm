@@ -4,7 +4,8 @@ GitLab prompt manager with configurable prompts folder.
 
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-from jinja2 import DictLoader, Environment, select_autoescape
+from jinja2 import DictLoader, select_autoescape
+from jinja2.sandbox import ImmutableSandboxedEnvironment
 
 from litellm.integrations.custom_prompt_management import CustomPromptManagement
 
@@ -90,7 +91,13 @@ class GitLabTemplateManager:
             or ""
         ).strip("/")
 
-        self.jinja_env = Environment(
+        # Templates fetched from a GitLab repo are not trustworthy:
+        # anyone with repo write access can ship Jinja syntax that, in a
+        # plain `Environment()`, would reach `__class__.__init__.__globals__`
+        # and pivot into RCE on the proxy host. The sandbox blocks that
+        # attribute traversal while leaving normal `{{ var }}` substitution
+        # intact. Matches the dotprompt manager's hardening.
+        self.jinja_env = ImmutableSandboxedEnvironment(
             loader=DictLoader({}),
             autoescape=select_autoescape(["html", "xml"]),
             variable_start_string="{{",
@@ -365,7 +372,9 @@ class GitLabPromptManager(CustomPromptManagement):
             if parsed_messages:
                 final_messages: List[AllMessageValues] = parsed_messages
             else:
-                final_messages = [{"role": "user", "content": rendered_prompt}] + messages  # type: ignore
+                final_messages = [
+                    {"role": "user", "content": rendered_prompt}
+                ] + messages  # type: ignore
 
             if litellm_params is None:
                 litellm_params = {}
@@ -405,24 +414,41 @@ class GitLabPromptManager(CustomPromptManagement):
             low = line.lower()
             if low.startswith("system:"):
                 if current_role and current_content:
-                    messages.append({"role": current_role, "content": "\n".join(current_content).strip()})  # type: ignore
+                    messages.append(
+                        {
+                            "role": current_role,
+                            "content": "\n".join(current_content).strip(),
+                        }
+                    )  # type: ignore
                 current_role = "system"
                 current_content = [line[7:].strip()]
             elif low.startswith("user:"):
                 if current_role and current_content:
-                    messages.append({"role": current_role, "content": "\n".join(current_content).strip()})  # type: ignore
+                    messages.append(
+                        {
+                            "role": current_role,
+                            "content": "\n".join(current_content).strip(),
+                        }
+                    )  # type: ignore
                 current_role = "user"
                 current_content = [line[5:].strip()]
             elif low.startswith("assistant:"):
                 if current_role and current_content:
-                    messages.append({"role": current_role, "content": "\n".join(current_content).strip()})  # type: ignore
+                    messages.append(
+                        {
+                            "role": current_role,
+                            "content": "\n".join(current_content).strip(),
+                        }
+                    )  # type: ignore
                 current_role = "assistant"
                 current_content = [line[10:].strip()]
             else:
                 current_content.append(line)
 
         if current_role and current_content:
-            messages.append({"role": current_role, "content": "\n".join(current_content).strip()})  # type: ignore
+            messages.append(
+                {"role": current_role, "content": "\n".join(current_content).strip()}
+            )  # type: ignore
         if not messages and prompt_content.strip():
             messages = [{"role": "user", "content": prompt_content.strip()}]  # type: ignore
         return messages

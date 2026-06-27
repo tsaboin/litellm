@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import litellm
 from litellm.constants import OPENAI_FILE_SEARCH_COST_PER_1K_CALLS
+from litellm.litellm_core_utils.llm_cost_calc.utils import _get_web_search_requests
 from litellm.types.llms.openai import (
     FileSearchTool,
     ResponsesAPIResponse,
@@ -89,6 +90,17 @@ class StandardBuiltInToolCostTracking:
         model_info = StandardBuiltInToolCostTracking._safe_get_model_info(
             model=model, custom_llm_provider=custom_llm_provider
         )
+
+        # A provider-prefixed model (e.g. gemini/gemini-3.1-flash-lite) may not map under the
+        # request's custom_llm_provider. Re-resolve from the prefix and adopt that provider so the
+        # cost is routed and priced with the model_info that was actually resolved, instead of
+        # feeding a re-resolved model into the original provider's calculator.
+        if model_info is None and "/" in model:
+            model_info = StandardBuiltInToolCostTracking._safe_get_model_info(
+                model=model
+            )
+            if model_info is not None:
+                custom_llm_provider = model_info["litellm_provider"]
 
         if custom_llm_provider is None and model_info is not None:
             custom_llm_provider = model_info["litellm_provider"]
@@ -339,8 +351,7 @@ class StandardBuiltInToolCostTracking:
                 # and _handle_web_search_cost() is never called.
                 if (
                     hasattr(usage, "server_tool_use")
-                    and usage.server_tool_use is not None
-                    and usage.server_tool_use.web_search_requests is not None
+                    and _get_web_search_requests(usage.server_tool_use) is not None
                 ):
                     return True
             return False
@@ -352,8 +363,7 @@ class StandardBuiltInToolCostTracking:
         elif usage is not None:
             if (
                 hasattr(usage, "server_tool_use")
-                and usage.server_tool_use is not None
-                and usage.server_tool_use.web_search_requests is not None
+                and _get_web_search_requests(usage.server_tool_use) is not None
             ):
                 return True
             elif (

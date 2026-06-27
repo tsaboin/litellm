@@ -86,9 +86,9 @@ class LangFuseHandler:
         if globalLangfuseLogger is not None:
             return globalLangfuseLogger
 
-        credentials_dict: Dict[str, Any] = (
-            {}
-        )  # the global langfuse logger uses Environment Variables, there are no dynamic credentials
+        credentials_dict: Dict[
+            str, Any
+        ] = {}  # the global langfuse logger uses Environment Variables, there are no dynamic credentials
         globalLangfuseLogger = in_memory_dynamic_logger_cache.get_cache(
             credentials=credentials_dict,
             service_name="langfuse",
@@ -115,8 +115,10 @@ class LangFuseHandler:
 
         langfuse_logger = LangFuseLogger(
             langfuse_public_key=credentials.get("langfuse_public_key"),
-            langfuse_secret=credentials.get("langfuse_secret"),
+            langfuse_secret=credentials.get("langfuse_secret")
+            or credentials.get("langfuse_secret_key"),
             langfuse_host=credentials.get("langfuse_host"),
+            allow_env_credentials=credentials.get("langfuse_host") is None,
         )
         in_memory_dynamic_logger_cache.set_cache(
             credentials=credentials,

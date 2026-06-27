@@ -11,17 +11,19 @@ The operation location must be polled until the analysis completes.
 import asyncio
 import re
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from urllib.parse import quote
 
 import httpx
 
 from litellm._logging import verbose_logger
+from litellm.litellm_core_utils.url_utils import SSRFError, assert_same_origin
 from litellm.constants import (
     AZURE_DOCUMENT_INTELLIGENCE_API_VERSION,
     AZURE_DOCUMENT_INTELLIGENCE_DEFAULT_DPI,
     AZURE_OPERATION_POLLING_TIMEOUT,
 )
+from litellm.litellm_core_utils.url_utils import encode_url_path_segment
 from litellm.llms.base_llm.ocr.transformation import (
     BaseOCRConfig,
     DocumentType,
@@ -32,6 +34,8 @@ from litellm.llms.base_llm.ocr.transformation import (
     OCRUsageInfo,
 )
 from litellm.secret_managers.main import get_secret_str
+
+AZURE_DOCUMENT_INTELLIGENCE_API_KEY_ENV_VAR = "AZURE_DOCUMENT_INTELLIGENCE_API_KEY"
 
 
 class AzureDocumentIntelligenceOCRConfig(BaseOCRConfig):
@@ -51,6 +55,9 @@ class AzureDocumentIntelligenceOCRConfig(BaseOCRConfig):
 
     def __init__(self) -> None:
         super().__init__()
+
+    def get_api_key_env_var(self) -> str | None:
+        return AZURE_DOCUMENT_INTELLIGENCE_API_KEY_ENV_VAR
 
     def get_supported_ocr_params(self, model: str) -> list:
         """
@@ -142,9 +149,9 @@ class AzureDocumentIntelligenceOCRConfig(BaseOCRConfig):
         self,
         headers: Dict,
         model: str,
-        api_key: Optional[str] = None,
-        api_base: Optional[str] = None,
-        litellm_params: Optional[dict] = None,
+        api_key: str | None = None,
+        api_base: str | None = None,
+        litellm_params: dict | None = None,
         **kwargs,
     ) -> Dict:
         """
@@ -154,7 +161,7 @@ class AzureDocumentIntelligenceOCRConfig(BaseOCRConfig):
         """
         # Get API key from environment if not provided
         if api_key is None:
-            api_key = get_secret_str("AZURE_DOCUMENT_INTELLIGENCE_API_KEY")
+            api_key = get_secret_str(AZURE_DOCUMENT_INTELLIGENCE_API_KEY_ENV_VAR)
 
         if api_key is None:
             raise ValueError(
@@ -180,10 +187,10 @@ class AzureDocumentIntelligenceOCRConfig(BaseOCRConfig):
 
     def get_complete_url(
         self,
-        api_base: Optional[str],
+        api_base: str | None,
         model: str,
         optional_params: dict,
-        litellm_params: Optional[dict] = None,
+        litellm_params: dict | None = None,
         **kwargs,
     ) -> str:
         """
@@ -217,11 +224,12 @@ class AzureDocumentIntelligenceOCRConfig(BaseOCRConfig):
         if "/" in model:
             # Extract the last part after the last slash
             model_id = model.split("/")[-1]
+        encoded_model_id = encode_url_path_segment(model_id, field_name="model_id")
 
         # Azure Document Intelligence analyze endpoint
         # Note: API version 2024-11-30+ uses /documentintelligence/ (not /formrecognizer/)
         url = (
-            f"{api_base}/documentintelligence/documentModels/{model_id}:analyze"
+            f"{api_base}/documentintelligence/documentModels/{encoded_model_id}:analyze"
             f"?api-version={AZURE_DOCUMENT_INTELLIGENCE_API_VERSION}"
         )
 
@@ -599,6 +607,16 @@ class AzureDocumentIntelligenceOCRConfig(BaseOCRConfig):
                         "Azure Document Intelligence returned 202 but no Operation-Location header found"
                     )
 
+                # Reject cross-origin polling URLs — the auth headers
+                # below would otherwise leak to whatever URL the upstream
+                # (or an attacker-controlled upstream) returns. VERIA-51.
+                try:
+                    assert_same_origin(operation_url, str(raw_response.request.url))
+                except SSRFError as ssrf_err:
+                    raise ValueError(
+                        f"Azure Document Intelligence: rejected polling URL ({ssrf_err})"
+                    )
+
                 # Get headers for polling (need auth)
                 poll_headers = {
                     "Ocp-Apim-Subscription-Key": raw_response.request.headers.get(
@@ -709,6 +727,14 @@ class AzureDocumentIntelligenceOCRConfig(BaseOCRConfig):
                 if not operation_url:
                     raise ValueError(
                         "Azure Document Intelligence returned 202 but no Operation-Location header found"
+                    )
+
+                # Reject cross-origin polling URLs (see sync path). VERIA-51.
+                try:
+                    assert_same_origin(operation_url, str(raw_response.request.url))
+                except SSRFError as ssrf_err:
+                    raise ValueError(
+                        f"Azure Document Intelligence: rejected polling URL ({ssrf_err})"
                     )
 
                 # Get headers for polling (need auth)

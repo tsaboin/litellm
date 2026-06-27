@@ -102,20 +102,25 @@ CREDENTIAL_VALUES: Final[List[CredentialsValue]] = [
     CredentialsValue(
         "auth_url",
         ("url",),
-        transform_fn=lambda url: url.rstrip("/")
-        + ("" if url.endswith(AUTH_ENDPOINT_SUFFIX) else AUTH_ENDPOINT_SUFFIX),
+        transform_fn=lambda url: (
+            url.rstrip("/")
+            + ("" if url.endswith(AUTH_ENDPOINT_SUFFIX) else AUTH_ENDPOINT_SUFFIX)
+        ),
     ),
     CredentialsValue(
         "base_url",
         ("serviceurls", "AI_API_URL"),
-        transform_fn=lambda url: url.rstrip("/")
-        + ("" if url.endswith("/v2") else "/v2"),
+        transform_fn=lambda url: (
+            url.rstrip("/") + ("" if url.endswith("/v2") else "/v2")
+        ),
     ),
     CredentialsValue(
         "cert_url",
         ("certurl",),
-        transform_fn=lambda url: url.rstrip("/")
-        + ("" if url.endswith(AUTH_ENDPOINT_SUFFIX) else AUTH_ENDPOINT_SUFFIX),
+        transform_fn=lambda url: (
+            url.rstrip("/")
+            + ("" if url.endswith(AUTH_ENDPOINT_SUFFIX) else AUTH_ENDPOINT_SUFFIX)
+        ),
     ),
     # file paths (kept for config compatibility)
     CredentialsValue("cert_file_path"),
@@ -207,7 +212,7 @@ def resolve_resource_group(sources: List[Source]) -> Optional[str]:
 
 
 def _parse_service_key_once(
-    service_key: Optional[Union[str, dict]]
+    service_key: Optional[Union[str, dict]],
 ) -> Optional[Dict[str, Any]]:
     """
     Pre-parse service_key if it's a string to avoid repeated JSON parsing.

@@ -4,19 +4,22 @@ Translates from Cohere's `/v1/rerank` input format to Vertex AI Discovery Engine
 Why separate file? Make it easy to see how transformation works
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 import httpx
 
 import litellm
 from litellm.litellm_core_utils.litellm_logging import Logging as LiteLLMLoggingObj
 from litellm.llms.base_llm.rerank.transformation import BaseRerankConfig
+from litellm.llms.vertex_ai.common_utils import (
+    vertex_request_labels_from_litellm_params,
+)
 from litellm.llms.vertex_ai.vertex_llm_base import VertexBase
 from litellm.secret_managers.main import get_secret_str
 from litellm.types.rerank import (
+    RerankBilledUnits,
     RerankResponse,
     RerankResponseMeta,
-    RerankBilledUnits,
     RerankResponseResult,
 )
 
@@ -33,9 +36,9 @@ class VertexAIRerankConfig(BaseRerankConfig, VertexBase):
 
     def get_complete_url(
         self,
-        api_base: Optional[str],
+        api_base: str | None,
         model: str,
-        optional_params: Optional[Dict] = None,
+        optional_params: Dict | None = None,
     ) -> str:
         """
         Get the complete URL for the Vertex AI Discovery Engine ranking API
@@ -73,8 +76,8 @@ class VertexAIRerankConfig(BaseRerankConfig, VertexBase):
         self,
         headers: dict,
         model: str,
-        api_key: Optional[str] = None,
-        optional_params: Optional[Dict] = None,
+        api_key: str | None = None,
+        optional_params: Dict | None = None,
     ) -> dict:
         """
         Validate and set up authentication for Vertex AI Discovery Engine API
@@ -109,6 +112,7 @@ class VertexAIRerankConfig(BaseRerankConfig, VertexBase):
         model: str,
         optional_rerank_params: Dict,
         headers: dict,
+        litellm_params: dict | None = None,
     ) -> dict:
         """
         Transform the request from Cohere format to Vertex AI Discovery Engine format
@@ -145,6 +149,10 @@ class VertexAIRerankConfig(BaseRerankConfig, VertexBase):
         # When return_documents is False, we want to ignore record details (return only IDs)
         request_data["ignoreRecordDetailsInResponse"] = not return_documents
 
+        user_labels = vertex_request_labels_from_litellm_params(litellm_params)
+        if user_labels:
+            request_data["userLabels"] = user_labels
+
         return request_data
 
     def transform_rerank_response(
@@ -153,7 +161,7 @@ class VertexAIRerankConfig(BaseRerankConfig, VertexBase):
         raw_response: httpx.Response,
         model_response: RerankResponse,
         logging_obj: LiteLLMLoggingObj,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         request_data: dict = {},
         optional_params: dict = {},
         litellm_params: dict = {},
@@ -228,12 +236,13 @@ class VertexAIRerankConfig(BaseRerankConfig, VertexBase):
         drop_params: bool,
         query: str,
         documents: List[Union[str, Dict[str, Any]]],
-        custom_llm_provider: Optional[str] = None,
-        top_n: Optional[int] = None,
-        rank_fields: Optional[List[str]] = None,
-        return_documents: Optional[bool] = True,
-        max_chunks_per_doc: Optional[int] = None,
-        max_tokens_per_doc: Optional[int] = None,
+        custom_llm_provider: str | None = None,
+        top_n: int | None = None,
+        rank_fields: List[str] | None = None,
+        return_documents: bool | None = True,
+        max_chunks_per_doc: int | None = None,
+        max_tokens_per_doc: int | None = None,
+        instruction: str | None = None,
     ) -> Dict:
         """
         Map Cohere rerank params to Vertex AI format

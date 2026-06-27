@@ -65,9 +65,7 @@ class AzureContentSafetyTextModerationGuardrail(AzureGuardrailBase, CustomGuardr
             **kwargs,
         )
 
-        self.optional_params_request_body: (
-            AzureTextModerationRequestBodyOptionalParams
-        ) = {
+        self.optional_params_request_body: AzureTextModerationRequestBodyOptionalParams = {
             "categories": kwargs.get("categories")
             or [
                 "Hate",
@@ -254,15 +252,16 @@ class AzureContentSafetyTextModerationGuardrail(AzureGuardrailBase, CustomGuardr
     ) -> Any:
         from litellm.types.utils import Choices, ModelResponse
 
-        if (
-            isinstance(response, ModelResponse)
-            and response.choices
-            and isinstance(response.choices[0], Choices)
-        ):
-            content = response.choices[0].message.content or ""
-            await self.async_make_request(
-                text=content,
-            )
+        if isinstance(response, ModelResponse) and response.choices:
+            for choice in response.choices:
+                if not isinstance(choice, Choices):
+                    continue
+                content = _message_content_to_text(choice.message.content)
+                if not content:
+                    continue
+                await self.async_make_request(
+                    text=content,
+                )
         return response
 
     async def async_post_call_streaming_hook(
@@ -279,3 +278,16 @@ class AzureContentSafetyTextModerationGuardrail(AzureGuardrailBase, CustomGuardr
 
             error_returned = json.dumps({"error": e.detail})
             return f"data: {error_returned}\n\n"
+
+
+def _message_content_to_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        text_parts = [
+            item.get("text")
+            for item in content
+            if isinstance(item, dict) and isinstance(item.get("text"), str)
+        ]
+        return "\n".join(part for part in text_parts if part)
+    return ""

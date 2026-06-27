@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Tuple
 import httpx
 
 from litellm._logging import verbose_logger
+from litellm.litellm_core_utils.url_utils import encode_url_path_segment
 from litellm.llms.base_llm.skills.transformation import (
     BaseSkillsAPIConfig,
     LiteLLMLoggingObj,
@@ -37,10 +38,12 @@ class AnthropicSkillsConfig(BaseSkillsAPIConfig):
 
         # Get API key from litellm_params if available
         api_key = None
+        api_base = None
         if litellm_params is not None:
             api_key = litellm_params.api_key
+            api_base = litellm_params.api_base
 
-        auth_header = AnthropicModelInfo.get_auth_header(api_key)
+        auth_header = AnthropicModelInfo.get_auth_header(api_key, api_base)
         if auth_header is None:
             raise ValueError(
                 "ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN is required for Skills API"
@@ -81,7 +84,8 @@ class AnthropicSkillsConfig(BaseSkillsAPIConfig):
             api_base = AnthropicModelInfo.get_api_base()
 
         if skill_id:
-            return f"{api_base}/v1/skills/{skill_id}"
+            encoded_skill_id = encode_url_path_segment(skill_id, field_name="skill_id")
+            return f"{api_base}/v1/skills/{encoded_skill_id}"
         return f"{api_base}/v1/{endpoint}"
 
     def transform_create_skill_request(

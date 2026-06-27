@@ -13,9 +13,13 @@ from litellm.types.llms.vertex_ai import VertexPartnerProvider
 from litellm.types.router import GenericLiteLLMParams
 
 from ....vertex_llm_base import VertexBase
+from ..output_params_utils import sanitize_vertex_anthropic_output_params
 
 
 class VertexAIPartnerModelsAnthropicMessagesConfig(AnthropicMessagesConfig, VertexBase):
+    def should_strip_billing_metadata(self) -> bool:
+        return True
+
     def validate_anthropic_messages_environment(
         self,
         headers: dict,
@@ -31,27 +35,21 @@ class VertexAIPartnerModelsAnthropicMessagesConfig(AnthropicMessagesConfig, Vert
 
         Validate the environment for the request
         """
+        # Work on a local copy — router shallow-copies litellm_params so the caller's
+        # headers dict may be the shared deployment extra_headers object.
+        headers = dict(headers)
         vertex_ai_project = VertexBase.safe_get_vertex_ai_project(litellm_params)
         vertex_ai_location = VertexBase.safe_get_vertex_ai_location(litellm_params)
 
-        project_id: Optional[str] = None
-        if "Authorization" not in headers:
-            vertex_credentials = VertexBase.safe_get_vertex_ai_credentials(
-                litellm_params
-            )
+        vertex_credentials = VertexBase.safe_get_vertex_ai_credentials(litellm_params)
+        access_token, project_id = self._ensure_access_token(
+            credentials=vertex_credentials,
+            project_id=vertex_ai_project,
+            custom_llm_provider="vertex_ai",
+        )
+        headers["Authorization"] = f"Bearer {access_token}"
 
-            access_token, project_id = self._ensure_access_token(
-                credentials=vertex_credentials,
-                project_id=vertex_ai_project,
-                custom_llm_provider="vertex_ai",
-            )
-
-            headers["Authorization"] = f"Bearer {access_token}"
-        else:
-            # Authorization already in headers, but we still need project_id
-            project_id = vertex_ai_project
-
-        # Always calculate api_base if not provided, regardless of Authorization header
+        # Calculate api_base if not provided
         if api_base is None:
             api_base = self.get_complete_vertex_url(
                 custom_api_base=api_base,
@@ -158,12 +156,6 @@ class VertexAIPartnerModelsAnthropicMessagesConfig(AnthropicMessagesConfig, Vert
             "model", None
         )  # do not pass model in request body to vertex ai
 
-        anthropic_messages_request.pop(
-            "output_format", None
-        )  # do not pass output_format in request body to vertex ai - vertex ai does not support output_format as yet
-
-        anthropic_messages_request.pop(
-            "output_config", None
-        )  # do not pass output_config in request body to vertex ai - vertex ai does not support output_config
+        sanitize_vertex_anthropic_output_params(anthropic_messages_request, model)
 
         return anthropic_messages_request

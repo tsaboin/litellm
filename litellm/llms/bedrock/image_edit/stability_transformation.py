@@ -122,7 +122,9 @@ class BedrockStabilityImageEditConfig(BaseImageEditConfig):
             if k in param_mapping:
                 # Map param if mapping exists and value is valid
                 if k == "size" and v in OPENAI_SIZE_TO_STABILITY_ASPECT_RATIO:
-                    mapped_params[param_mapping[k]] = OPENAI_SIZE_TO_STABILITY_ASPECT_RATIO[v]  # type: ignore
+                    mapped_params[param_mapping[k]] = (
+                        OPENAI_SIZE_TO_STABILITY_ASPECT_RATIO[v]
+                    )  # type: ignore
                 # Don't copy "size" itself to final dict
             elif k == "n":
                 # Store for logic but do not add to outgoing params
@@ -149,7 +151,7 @@ class BedrockStabilityImageEditConfig(BaseImageEditConfig):
 
         return mapped_params
 
-    def transform_image_edit_request(  # noqa: PLR0915
+    def transform_image_edit_request(
         self,
         model: str,
         prompt: Optional[str],
@@ -372,6 +374,8 @@ class BedrockStabilityImageEditConfig(BaseImageEditConfig):
         headers: dict,
         model: str,
         api_key: Optional[str] = None,
+        litellm_params: Optional[dict] = None,
+        api_base: Optional[str] = None,
     ) -> dict:
         """
         Validate environment for Bedrock Stability image edit.

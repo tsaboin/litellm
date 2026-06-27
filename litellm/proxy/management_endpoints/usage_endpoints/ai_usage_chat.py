@@ -197,8 +197,7 @@ def _build_system_prompt(is_admin: bool) -> str:
     """Build role-appropriate system prompt with today's date."""
     tool_desc = _TOOL_DESCRIPTIONS_ADMIN if is_admin else _TOOL_DESCRIPTIONS_BASE
     return (
-        f"{_SYSTEM_PROMPT_BASE}\n\n{tool_desc}"
-        f"Today's date: {date.today().isoformat()}"
+        f"{_SYSTEM_PROMPT_BASE}\n\n{tool_desc}Today's date: {date.today().isoformat()}"
     )
 
 
@@ -352,7 +351,9 @@ def _summarise_usage_data(data: Dict[str, Any]) -> str:
 
     model_lines = _ranked_lines(
         models,
-        lambda n, d: f"  - {n}: ${d['spend']:.4f} ({int(d['api_requests'])} reqs, {int(d['total_tokens'])} tokens)",
+        lambda n, d: (
+            f"  - {n}: ${d['spend']:.4f} ({int(d['api_requests'])} reqs, {int(d['total_tokens'])} tokens)"
+        ),
         TOP_N_MODELS,
     )
     provider_lines = _ranked_lines(
@@ -440,6 +441,15 @@ def _resolve_fetch_kwargs(
     kwargs: Dict[str, Any] = {"start_date": start_date, "end_date": end_date}
     if fn_name == "get_usage_data":
         if not is_admin:
+            if user_id is None:
+                # Defense-in-depth: the endpoint guard in usage_endpoints/endpoints.py
+                # should have already rejected this. If we ever reach here it means
+                # a future caller invoked the helper without scoping — fail loudly
+                # rather than issuing an unfiltered global query.
+                raise ValueError(
+                    "Non-admin caller has user_id=None; refusing to issue an "
+                    "unscoped query. Endpoint-level guard missing."
+                )
             kwargs["user_id"] = user_id
         elif fn_args.get("user_id"):
             kwargs["user_id"] = fn_args["user_id"]

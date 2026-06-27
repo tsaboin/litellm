@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union, cas
 import httpx
 from httpx import Headers, Response
 
+from litellm.litellm_core_utils.url_utils import encode_url_path_segment
 from litellm.llms.base_llm.batches.transformation import BaseBatchesConfig
 from litellm.llms.base_llm.chat.transformation import BaseLLMException
 from litellm.types.llms.openai import AllMessageValues, CreateBatchRequest
@@ -42,7 +43,9 @@ class AnthropicBatchesConfig(BaseBatchesConfig):
         api_base: Optional[str] = None,
     ) -> dict:
         """Validate and prepare environment-specific headers and parameters."""
-        auth_header = self.anthropic_model_info.get_auth_header(api_key)
+        if api_base is None and isinstance(litellm_params, dict):
+            api_base = litellm_params.get("api_base")
+        auth_header = self.anthropic_model_info.get_auth_header(api_key, api_base)
         if auth_header is None:
             raise ValueError(
                 "Missing Anthropic API Key - A call is being made to anthropic but no key is set either in the environment variables or via params"
@@ -122,7 +125,8 @@ class AnthropicBatchesConfig(BaseBatchesConfig):
             Complete URL for Anthropic batch retrieval: {api_base}/v1/messages/batches/{batch_id}
         """
         api_base = api_base or self.anthropic_model_info.get_api_base(api_base)
-        return f"{api_base.rstrip('/')}/v1/messages/batches/{batch_id}"
+        encoded_batch_id = encode_url_path_segment(batch_id, field_name="batch_id")
+        return f"{api_base.rstrip('/')}/v1/messages/batches/{encoded_batch_id}"
 
     def transform_retrieve_batch_request(
         self,

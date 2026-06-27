@@ -42,6 +42,8 @@ class BaseRAGIngestion(ABC):
     vector stores, so it overrides the embedding step to be a no-op.
     """
 
+    supports_existing_file_id: bool = False
+
     def __init__(
         self,
         ingest_options: RAGIngestOptions,
@@ -71,7 +73,10 @@ class BaseRAGIngestion(ABC):
         Load credentials from litellm_credential_name if provided in vector_store config.
 
         This allows users to specify a credential name in the vector_store config
-        which will be resolved from litellm.credential_list.
+        which will be resolved from litellm.credential_list. When a stored
+        credential is used, its values take precedence over caller-supplied
+        equivalents so endpoint and identity fields stay consistent with the
+        credential definition.
         """
         from litellm.litellm_core_utils.credential_accessor import CredentialAccessor
 
@@ -80,10 +85,17 @@ class BaseRAGIngestion(ABC):
             credential_values = CredentialAccessor.get_credential_values(
                 credential_name
             )
-            # Merge credentials into vector_store_config (don't overwrite existing values)
+            if not credential_values:
+                return
             for key, value in credential_values.items():
-                if key not in self.vector_store_config:
-                    self.vector_store_config[key] = value
+                self.vector_store_config[key] = value
+            for key in (
+                "api_base",
+                "aws_sts_endpoint",
+                "aws_web_identity_token",
+            ):
+                if key in self.vector_store_config and key not in credential_values:
+                    del self.vector_store_config[key]
 
     @property
     def custom_llm_provider(self) -> str:
@@ -172,7 +184,9 @@ class BaseRAGIngestion(ABC):
         # Extract text from pages
         if hasattr(ocr_response, "pages") and ocr_response.pages:  # type: ignore
             return "\n\n".join(
-                page.markdown for page in ocr_response.pages if hasattr(page, "markdown")  # type: ignore
+                page.markdown
+                for page in ocr_response.pages
+                if hasattr(page, "markdown")  # type: ignore
             )
 
         return None
@@ -270,6 +284,7 @@ class BaseRAGIngestion(ABC):
         content_type: Optional[str],
         chunks: List[str],
         embeddings: Optional[List[List[float]]],
+        existing_file_id: str | None = None,
     ) -> Tuple[Optional[str], Optional[str]]:
         """
         Store content in vector store.
@@ -282,6 +297,7 @@ class BaseRAGIngestion(ABC):
             content_type: MIME type
             chunks: Text chunks (if chunking was done locally)
             embeddings: Embeddings (if embedding was done locally)
+            existing_file_id: Provider file ID supplied by the caller, if any
 
         Returns:
             Tuple of (vector_store_id, file_id)
@@ -316,6 +332,12 @@ class BaseRAGIngestion(ABC):
         )
 
         try:
+            if existing_file_id and not self.supports_existing_file_id:
+                raise ValueError(
+                    f"{self.__class__.__name__} does not support ingesting an existing file_id. "
+                    "Upload file data or provide file_url instead."
+                )
+
             # Step 2: OCR (optional)
             extracted_text = await self.ocr(
                 file_content=file_content,
@@ -339,6 +361,7 @@ class BaseRAGIngestion(ABC):
                 content_type=content_type,
                 chunks=chunks,
                 embeddings=embeddings,
+                existing_file_id=existing_file_id,
             )
 
             return RAGIngestResponse(
