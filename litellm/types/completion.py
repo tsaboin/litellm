@@ -1,16 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Coroutine,
-    Iterable,
-    List,
-    Optional,
-    Union,
-)
+from typing import Any, Callable, Coroutine, Final, Iterable, List, Optional, TYPE_CHECKING, Union
 
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import Literal, Required, TypedDict
@@ -66,9 +57,7 @@ class ChatCompletionContentPartImageParam(TypedDict, total=False):
     """The type of the content part."""
 
 
-ChatCompletionContentPartParam = Union[
-    ChatCompletionContentPartTextParam, ChatCompletionContentPartImageParam
-]
+ChatCompletionContentPartParam = Union[ChatCompletionContentPartTextParam, ChatCompletionContentPartImageParam]
 
 
 class ChatCompletionUserMessageParam(TypedDict, total=False):

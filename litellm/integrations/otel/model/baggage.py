@@ -24,20 +24,16 @@ from litellm.integrations.otel.model.semconv import GenAI, LiteLLM
 # team_metadata_keys). The single definition of what may be promoted and under
 # which key. Only the ``TEAM_METADATA`` extractor consults team_metadata_keys
 # (to filter the team's metadata to an allowlist); the rest ignore it.
-_PROMOTABLE: Final[
-    dict[str, Callable[[RequestIdentity, str | None, tuple[str, ...]], str | None]]
-] = {
+_PROMOTABLE: Final[dict[str, Callable[[RequestIdentity, str | None, tuple[str, ...]], str | None]]] = {
     LiteLLM.TEAM_ID: lambda identity, model, team_metadata_keys: identity.team_id,
     LiteLLM.TEAM_ALIAS: lambda identity, model, team_metadata_keys: identity.team_alias,
-    LiteLLM.TEAM_METADATA: lambda identity, model, team_metadata_keys: (
-        _filtered_team_metadata_json(identity.team_metadata, team_metadata_keys)
+    LiteLLM.TEAM_METADATA: lambda identity, model, team_metadata_keys: _filtered_team_metadata_json(
+        identity.team_metadata, team_metadata_keys
     ),
     LiteLLM.KEY_HASH: lambda identity, model, team_metadata_keys: identity.key_hash,
     LiteLLM.END_USER: lambda identity, model, team_metadata_keys: identity.end_user,
     GenAI.REQUEST_MODEL: lambda identity, model, team_metadata_keys: model,
-    LiteLLM.PROVIDER_MODEL: lambda identity, model, team_metadata_keys: (
-        identity.provider_model
-    ),
+    LiteLLM.PROVIDER_MODEL: lambda identity, model, team_metadata_keys: identity.provider_model,
 }
 
 # Keys promoted by default (a subset of ``_PROMOTABLE``). ``END_USER`` is
@@ -83,7 +79,7 @@ def promoted_baggage(
     ``team_metadata_keys`` selects sub-keys of the team's metadata to promote
     under ``litellm.team.metadata``. Empty values are dropped.
     """
-    out: dict[str, str] = {}
+    out: Final[dict[str, str]] = {}
     for key, extract in _PROMOTABLE.items():
         if key in promoted_keys:
             value = extract(identity, request_model, team_metadata_keys)
@@ -108,7 +104,7 @@ def _filtered_team_metadata_json(
     """
     if not isinstance(metadata, Mapping) or not allowed_keys:
         return None
-    filtered = {key: metadata[key] for key in allowed_keys if key in metadata}
+    filtered: Final = {key: metadata[key] for key in allowed_keys if key in metadata}
     if not filtered:
         return None
     return json.dumps(filtered, default=str, sort_keys=True)

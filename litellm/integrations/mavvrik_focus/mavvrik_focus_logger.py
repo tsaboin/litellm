@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Final
 
 import litellm
 from litellm._logging import verbose_proxy_logger
@@ -36,8 +36,8 @@ else:
 
 
 def _parse_metrics_marker(
-    marker: Optional[object],
-) -> Optional[datetime]:
+    marker: object | None,
+) -> datetime | None:
     """Parse metricsMarker from Mavvrik register response into a UTC datetime.
 
     Handles both formats Mavvrik may return:
@@ -66,13 +66,11 @@ def _parse_metrics_marker(
                     continue
     except Exception:
         pass
-    verbose_proxy_logger.warning(
-        "Mavvrik FOCUS: could not parse metricsMarker %r — skipping catch-up", marker
-    )
+    verbose_proxy_logger.warning("Mavvrik FOCUS: could not parse metricsMarker %r — skipping catch-up", marker)
     return None
 
 
-def _is_empty_metrics_marker(marker: Optional[object]) -> bool:
+def _is_empty_metrics_marker(marker: object | None) -> bool:
     if marker is None:
         return True
     if isinstance(marker, (int, float)):
@@ -86,7 +84,7 @@ class MavvrikFocusLogger(FocusLogger):
     """FOCUS-based export logger that routes to the Mavvrik destination."""
 
     def __init__(self, **kwargs: Any) -> None:
-        frequency = os.getenv("MAVVRIK_FOCUS_FREQUENCY", "daily").lower()
+        frequency: Final = os.getenv("MAVVRIK_FOCUS_FREQUENCY", "daily").lower()
         if frequency != "daily":
             raise ValueError(
                 f"MAVVRIK_FOCUS_FREQUENCY='{frequency}' is not supported. "
@@ -106,19 +104,19 @@ class MavvrikFocusLogger(FocusLogger):
             },
             **kwargs,
         )
-        raw = os.getenv("MAVVRIK_FOCUS_MAX_ROWS")
-        self._max_rows: Optional[int] = int(raw) if raw else 500_000
+        raw: Final = os.getenv("MAVVRIK_FOCUS_MAX_ROWS")
+        self._max_rows: int | None = int(raw) if raw else 500_000
 
     async def _export_window(
         self,
         *,
         window: FocusTimeWindow,
-        limit: Optional[int],
+        limit: int | None,
     ) -> None:
         """Export with Mavvrik row cap applied when no explicit limit is passed."""
-        effective_limit = limit if limit is not None else self._max_rows
-        engine = self._ensure_engine()
-        data = await engine._database.get_usage_data(
+        effective_limit: Final = limit if limit is not None else self._max_rows
+        engine: Final = self._ensure_engine()
+        data: Final = await engine._database.get_usage_data(
             limit=effective_limit,
             start_time_utc=window.start_time,
             end_time_utc=window.end_time,
@@ -134,11 +132,9 @@ class MavvrikFocusLogger(FocusLogger):
             )
         payload = b""
         if data.is_empty():
-            verbose_proxy_logger.debug(
-                "Mavvrik FOCUS export: no usage data for window %s", window
-            )
+            verbose_proxy_logger.debug("Mavvrik FOCUS export: no usage data for window %s", window)
         else:
-            normalized = engine._transformer.transform(data)
+            normalized: Final = engine._transformer.transform(data)
             if not normalized.is_empty():
                 payload = engine._serializer.serialize(normalized)
         await engine._destination.deliver(
@@ -164,40 +160,33 @@ class MavvrikFocusLogger(FocusLogger):
         This ensures a failed export on day N is automatically retried on day N+1
         without any manual intervention.
         """
-        engine = self._ensure_engine()
+        engine: Final = self._ensure_engine()
         from litellm.integrations.focus.destinations.mavvrik_destination import (  # noqa: PLC0415
             FocusMavvrikDestination,
         )
 
-        destination = engine._destination
+        destination: Final = engine._destination
         if not isinstance(destination, FocusMavvrikDestination):
             await super()._run_scheduled_export()
             return
 
         # Register and get the last date Mavvrik has processed.
         # metricsMarker may be a Unix timestamp (int/float) or an ISO date string.
-        marker = await destination.get_metrics_marker()
+        marker: Final = await destination.get_metrics_marker()
 
-        now = datetime.now(timezone.utc)
-        yesterday = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(
-            days=1
-        )
+        now: Final = datetime.now(timezone.utc)
+        yesterday: Final = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
 
-        last_ingested = _parse_metrics_marker(marker)
+        last_ingested: Final = _parse_metrics_marker(marker)
 
-        is_empty_marker = _is_empty_metrics_marker(marker)
-        earliest_catchup = yesterday - timedelta(days=self._MAX_CATCHUP_DAYS - 1)
+        is_empty_marker: Final = _is_empty_metrics_marker(marker)
+        earliest_catchup: Final = yesterday - timedelta(days=self._MAX_CATCHUP_DAYS - 1)
         if is_empty_marker or (last_ingested is not None and last_ingested < yesterday):
             catch_up_date = (
-                earliest_catchup
-                if last_ingested is None
-                else max(last_ingested + timedelta(days=1), earliest_catchup)
+                earliest_catchup if last_ingested is None else max(last_ingested + timedelta(days=1), earliest_catchup)
             )
 
-            if (
-                last_ingested is not None
-                and last_ingested + timedelta(days=1) < earliest_catchup
-            ):
+            if last_ingested is not None and last_ingested + timedelta(days=1) < earliest_catchup:
                 verbose_proxy_logger.warning(
                     "Mavvrik FOCUS export: metricsMarker is more than %d days behind "
                     "(%s). Catching up from %s only; earlier data will not be re-exported.",
@@ -239,25 +228,19 @@ class MavvrikFocusLogger(FocusLogger):
 
         pod_lock_manager = None
         if proxy_logging_obj is not None:
-            writer = getattr(proxy_logging_obj, "db_spend_update_writer", None)
+            writer: Final = getattr(proxy_logging_obj, "db_spend_update_writer", None)
             if writer is not None:
                 pod_lock_manager = getattr(writer, "pod_lock_manager", None)
 
         if pod_lock_manager and pod_lock_manager.redis_cache:
-            acquired = await pod_lock_manager.acquire_lock(
-                cronjob_id=MAVVRIK_FOCUS_EXPORT_JOB_NAME
-            )
+            acquired: Final = await pod_lock_manager.acquire_lock(cronjob_id=MAVVRIK_FOCUS_EXPORT_JOB_NAME)
             if not acquired:
-                verbose_proxy_logger.debug(
-                    "Mavvrik FOCUS export: unable to acquire pod lock"
-                )
+                verbose_proxy_logger.debug("Mavvrik FOCUS export: unable to acquire pod lock")
                 return
             try:
                 await self._run_scheduled_export()
             finally:
-                await pod_lock_manager.release_lock(
-                    cronjob_id=MAVVRIK_FOCUS_EXPORT_JOB_NAME
-                )
+                await pod_lock_manager.release_lock(cronjob_id=MAVVRIK_FOCUS_EXPORT_JOB_NAME)
         else:
             await self._run_scheduled_export()
 
@@ -266,11 +249,9 @@ class MavvrikFocusLogger(FocusLogger):
         scheduler: AsyncIOScheduler,
     ) -> None:
         """Register the Mavvrik FOCUS export job on the provided scheduler."""
-        loggers: List[MavvrikFocusLogger] = [
+        loggers: list[MavvrikFocusLogger] = [
             cb
-            for cb in litellm.logging_callback_manager.get_custom_loggers_for_type(
-                callback_type=MavvrikFocusLogger
-            )
+            for cb in litellm.logging_callback_manager.get_custom_loggers_for_type(callback_type=MavvrikFocusLogger)
             if type(cb) is MavvrikFocusLogger
         ]
         if not loggers and "mavvrik" in litellm.callbacks:
@@ -281,7 +262,7 @@ class MavvrikFocusLogger(FocusLogger):
                 _init_custom_logger_compatible_class,
             )
 
-            instance = _init_custom_logger_compatible_class(
+            instance: Final = _init_custom_logger_compatible_class(
                 logging_integration="mavvrik",
                 internal_usage_cache=None,
                 llm_router=None,
@@ -289,19 +270,15 @@ class MavvrikFocusLogger(FocusLogger):
             if isinstance(instance, MavvrikFocusLogger):
                 loggers = [instance]
         if not loggers:
-            verbose_proxy_logger.debug(
-                "No MavvrikFocusLogger registered; skipping scheduler"
-            )
+            verbose_proxy_logger.debug("No MavvrikFocusLogger registered; skipping scheduler")
             return
 
-        logger = loggers[0]
-        trigger_kwargs = logger._build_scheduler_trigger()
+        logger: Final = loggers[0]
+        trigger_kwargs: Final = logger._build_scheduler_trigger()
         scheduler.add_job(  # type: ignore[attr-defined]
             logger.initialize_mavvrik_focus_export_job,
             id=MAVVRIK_FOCUS_EXPORT_JOB_NAME,
             replace_existing=True,
             **trigger_kwargs,
         )
-        verbose_proxy_logger.info(
-            "mavvrik_focus: background export job scheduled (%s)", trigger_kwargs
-        )
+        verbose_proxy_logger.info("mavvrik_focus: background export job scheduled (%s)", trigger_kwargs)
