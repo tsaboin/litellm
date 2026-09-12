@@ -7,4 +7,6 @@ case "$USE_DDTRACE" in
         ;;
 esac
 
+python3 openrouterconfig/writeconfig.py
+
 exec litellm "$@"
