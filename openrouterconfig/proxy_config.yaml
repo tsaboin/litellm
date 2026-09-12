@@ -11,4 +11,3 @@ litellm_settings:
   callbacks:
   - smtp_email
   - langfuse
-  - openmeter
